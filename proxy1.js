@@ -94,13 +94,12 @@ function compress(req, res, input) {
         .grayscale(req.params.grayscale)
         .toFormat(format, { quality: req.params.quality, effort: 0 })
         .on("info", (info) => {
-          infoReceived = true;
           res.setHeader("content-type", "image/" + format);
           res.setHeader("content-length", info.size);
           res.setHeader("x-original-size", req.params.originSize);
           res.setHeader("x-bytes-saved", req.params.originSize - info.size);
           res.statusCode = 200;
-        })
+        });
         .on("data", chunk => {
           res.write(chunk);
         })

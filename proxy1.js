@@ -49,12 +49,13 @@ function copyHeaders(source, target) {
 function redirect(req, res) {
   if (res.headersSent) return;
 
-  res.writeHead(302, {
-    Location: encodeURI(req.params.url),
-    "Content-Length": "0",
-  });
-
-  ["cache-control", "expires", "date", "etag"].forEach(header => res.removeHeader(header));
+  res.setHeader("content-length", 0);
+  res.removeHeader("cache-control");
+  res.removeHeader("expires");
+  res.removeHeader("date");
+  res.removeHeader("etag");
+  res.setHeader("location", encodeURI(req.params.url));
+  res.statusCode = 302;
   res.end();
 }
 

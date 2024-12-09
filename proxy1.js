@@ -73,7 +73,7 @@ function compress(req, res, input) {
   const sharpInstance = sharp({
     unlimited: true,
     failOn: "none",
-    limitInputPixels: false;
+    limitInputPixels: false
   });
 
   sharp.cache(false);

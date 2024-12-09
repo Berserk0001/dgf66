@@ -88,7 +88,7 @@ function compress(req, res, input) {
           width: null, // Declared width as null
           height: MAX_HEIGHT,
           withoutEnlargement: true
-        });
+        })
       }
       return sharpInstance
         .grayscale(req.params.grayscale)
@@ -101,15 +101,15 @@ function compress(req, res, input) {
           res.statusCode = 200;
         })
         .on("data", chunk => {
-          res.write(chunk);
+          res.write(chunk)
         })
         .on("end", () => {
-          res.end();
+          res.end()
         })
-        .on("error", () => redirect(req, res));
-    });
+        .on("error", () => redirect(req, res))
+    })
 
-  input.pipe(sharpInstance);
+  input.pipe(sharpInstance)
 }
 
 /**

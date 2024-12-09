@@ -4,14 +4,11 @@ import http from "http";
 import https from "https";
 import sharp from "sharp";
 import pick from "./pick.js";
-import { availableParallelism } from 'os';
+import { availableParallelism } from "os";
 
-// Constants
 const DEFAULT_QUALITY = 40;
 const MIN_COMPRESS_LENGTH = 1024;
 const MIN_TRANSPARENT_COMPRESS_LENGTH = MIN_COMPRESS_LENGTH * 100;
-const MAX_HEIGHT = 16383;
-const USER_AGENT = "Bandwidth-Hero Compressor";
 
 /**
  * Determines if image compression should be applied based on request parameters.
@@ -20,13 +17,13 @@ const USER_AGENT = "Bandwidth-Hero Compressor";
  */
 function shouldCompress(req) {
   const { originType, originSize, webp } = req.params;
-  return (
-    originType.startsWith("image") &&
-    originSize > 0 &&
-    !req.headers.range &&
-    !(webp && originSize < MIN_COMPRESS_LENGTH) &&
-    !(!webp && (originType.endsWith("png") || originType.endsWith("gif")) && originSize < MIN_TRANSPARENT_COMPRESS_LENGTH)
-  );
+
+  if (!originType.startsWith("image") || originSize === 0 || req.headers.range) return false;
+  if (webp && originSize < MIN_COMPRESS_LENGTH) return false;
+  if (!webp && ["png", "gif"].some(ext => originType.endsWith(ext)) && originSize < MIN_TRANSPARENT_COMPRESS_LENGTH) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -35,13 +32,13 @@ function shouldCompress(req) {
  * @param {http.ServerResponse} target - The target for headers.
  */
 function copyHeaders(source, target) {
-  Object.entries(source.headers).forEach(([key, value]) => {
+  for (const [key, value] of Object.entries(source.headers)) {
     try {
       target.setHeader(key, value);
-    } catch (e) {
-      console.log(e.message);
+    } catch (err) {
+      console.error(err.message);
     }
-  });
+  }
 }
 
 /**
@@ -52,13 +49,12 @@ function copyHeaders(source, target) {
 function redirect(req, res) {
   if (res.headersSent) return;
 
-  res.setHeader("content-length", 0);
-  res.removeHeader("cache-control");
-  res.removeHeader("expires");
-  res.removeHeader("date");
-  res.removeHeader("etag");
-  res.setHeader("location", encodeURI(req.params.url));
-  res.statusCode = 302;
+  res.writeHead(302, {
+    Location: encodeURI(req.params.url),
+    "Content-Length": "0",
+  });
+
+  ["cache-control", "expires", "date", "etag"].forEach(header => res.removeHeader(header));
   res.end();
 }
 
@@ -70,42 +66,36 @@ function redirect(req, res) {
  */
 function compress(req, res, input) {
   const format = req.params.webp ? "webp" : "jpeg";
+
+  sharp.cache(false);  // Disable sharp cache
+  sharp.simd(false);   // Disable SIMD optimization
+  sharp.concurrency(availableParallelism()); // Set concurrency to the available parallelism
+
   const sharpInstance = sharp({
     unlimited: true,
     failOn: "none",
-    limitInputPixels: false
+    limitInputPixels: false,
   });
-
-  sharp.cache(false);
-  sharp.simd(false);
-  sharp.concurrency(availableParallelism());
 
   sharpInstance
     .metadata()
     .then(metadata => {
-      if (metadata.height > MAX_HEIGHT) {
-        sharpInstance.resize({
-          width: null, // Declared width as null
-          height: MAX_HEIGHT,
-          withoutEnlargement: true;
-        });
+      if (metadata.height > 16383) {
+        sharpInstance.resize({ height: 16383, withoutEnlargement: true });
       }
-      return sharpInstance
+
+      sharpInstance
         .grayscale(req.params.grayscale)
         .toFormat(format, { quality: req.params.quality, effort: 0 })
-        .on("info", (info) => {
-          res.setHeader("content-type", "image/" + format);
+        .on("info", info => {
+          res.setHeader("content-type", `image/${format}`);
           res.setHeader("content-length", info.size);
           res.setHeader("x-original-size", req.params.originSize);
           res.setHeader("x-bytes-saved", req.params.originSize - info.size);
           res.statusCode = 200;
         })
-        .on("data", chunk => {
-          res.write(chunk);
-        })
-        .on("end", () => {
-          res.end();
-        })
+        .on("data", chunk => res.write(chunk))
+        .on("end", () => res.end())
         .on("error", () => redirect(req, res));
     });
 
@@ -118,18 +108,17 @@ function compress(req, res, input) {
  * @param {http.ServerResponse} res - The HTTP response.
  */
 function hhproxy(req, res) {
-  let url = req.query.url;
+  const url = req.query.url;
   if (!url) return res.end("bandwidth-hero-proxy");
 
   req.params = {
     url: decodeURIComponent(url),
     webp: !req.query.jpeg,
     grayscale: req.query.bw != 0,
-    quality: parseInt(req.query.l, 10) || DEFAULT_QUALITY
+    quality: parseInt(req.query.l, 10) || DEFAULT_QUALITY,
   };
 
-  if (req.headers["via"] === "1.1 bandwidth-hero" &&
-    ["127.0.0.1", "::1"].includes(req.headers["x-forwarded-for"] || req.ip)) {
+  if (req.headers.via === "1.1 bandwidth-hero" && ["127.0.0.1", "::1"].includes(req.headers["x-forwarded-for"] || req.ip)) {
     return redirect(req, res);
   }
 
@@ -137,17 +126,17 @@ function hhproxy(req, res) {
   const options = {
     headers: {
       ...pick(req.headers, ["cookie", "dnt", "referer", "range"]),
-      "User-Agent": USER_AGENT,
+      "User-Agent": "Bandwidth-Hero Compressor",
       "X-Forwarded-For": req.headers["x-forwarded-for"] || req.ip,
-      "Via": "1.1 bandwidth-hero"
+      Via: "1.1 bandwidth-hero",
     },
-    rejectUnauthorized: false
+    rejectUnauthorized: false,
   };
 
-  const requestModule = parsedUrl.protocol === 'https:' ? https : http;
+  const requestModule = parsedUrl.protocol === "https:" ? https : http;
 
   try {
-    let originReq = requestModule.request(parsedUrl, options, originRes => {
+    const originReq = requestModule.request(parsedUrl, options, originRes => {
       if (originRes.statusCode >= 400 || (originRes.statusCode >= 300 && originRes.headers.location)) {
         originRes.resume();
         return redirect(req, res);
@@ -176,15 +165,14 @@ function hhproxy(req, res) {
       }
     });
 
-    originReq.on('error', () => req.socket.destroy());
+    originReq.on("error", () => req.socket.destroy());
     originReq.end();
   } catch (err) {
     if (err.code === "ERR_INVALID_URL") {
-      res.status(400).send("Invalid URL");
-    } else {
-      redirect(req, res);
-      console.error(err);
+      return res.status(400).send("Invalid URL");
     }
+    redirect(req, res);
+    console.error(err);
   }
 }
 

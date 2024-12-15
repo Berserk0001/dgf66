@@ -147,7 +147,7 @@ function compress(req, res, inputStream) {
         .metadata()
         .then((metadata) => {
             // Resize if the height exceeds the maximum limit
-            if (metadata.height > MAX_HEIGHT) {
+            if (metadata.height > 16383) {
                 sharpInstance.resize({
                     width: null,
                     height: 16383,

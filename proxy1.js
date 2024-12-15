@@ -123,72 +123,79 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {Readable} inputStream - The input image stream.
  */
+/**
+ * Compresses the input image stream and sends the processed image in the response.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {stream.Readable} inputStream - The input stream of image data.
+ */
 function compress(req, res, inputStream) {
-  const format = req.params.webp ? 'webp' : 'jpeg';
-  let resizeWidth = null;
-   let resizeHeight = null;
+    // First, fetch metadata from the image
+    const image = sharp();
+    const metadataImage = sharp();
 
-  // Initialize sharp pipeline
-  const image = sharp()
-      .grayscale(req.params.grayscale)
-      .resize({
-          width: resizeWidth,
-          height: 16383, // Optional resizing
-        withoutEnlargement: true
-      })
-      .toFormat(format, {
-          quality: req.params.quality,
-          effort: 0, // For WebP, set compression effort to minimal
-      });
+    inputStream
+        .pipe(metadataImage)
+        .metadata()
+        .then((metadata) => {
+            // Set resize parameters based on metadata
+            let resizeWidth = null;
+            let resizeHeight = null;
 
-  // Get metadata to handle height adjustments or other pre-processing
-  inputStream
-      .pipe(sharp().metadata((err, metadata) => {
-          if (err) {
-              console.error("Error fetching metadata:", err.message);
-              return redirect(req, res);
-          }
+            // Handle longstrip images exceeding WebP height limit
+            if (metadata.height >= 16383) {
+                resizeHeight = 16383;
+            }
 
-          // Adjust resizeHeight if the image exceeds WebP's max height
-          if (metadata.height >= 16383) {
-              resizeHeight = 16383;
-          }
-      }))
-      .on('error', (err) => {
-          console.error("Error during metadata extraction:", err.message);
-          redirect(req, res);
-      });
+            const format = req.params.webp ? 'webp' : 'jpeg';
+            const compressionQuality = req.params.quality;
 
-  // Process the input stream
-  inputStream
-      .pipe(image)
-      .on('info', (info) => {
-          // Set headers for the processed image
-          setResponseHeaders(res, info, format, req.params.originSize);
-      })
-      .on('error', (err) => {
-          console.error("Error during image processing:", err.message);
-          redirect(req, res);
-      })
-      .pipe(res)
-      .on('finish', () => {
-          res.status(200).end();
-      });
+            // Reprocess the input stream
+            inputStream
+                .pipe(
+                    image.resize({
+                        width: resizeWidth,
+                        height: resizeHeight,
+                    })
+                    .grayscale(req.params.grayscale)
+                    .toFormat(format, {
+                        quality: compressionQuality,
+                        effort: 0,
+                    })
+                )
+                .on('info', (info) => {
+                    // Set response headers
+                    setResponseHeaders(res, info, format, req.params.originSize);
+                })
+                .on('error', (err) => {
+                    console.error("Error during image processing:", err.message);
+                    redirect(req, res);
+                })
+                .pipe(res)
+                .on('finish', () => {
+                    res.end();
+                });
+        })
+        .catch((err) => {
+            console.error("Error fetching metadata:", err.message);
+            redirect(req, res);
+        });
 }
 
 /**
-* Sets headers for the compressed image response.
-* @param {http.ServerResponse} res - The HTTP response.
-* @param {object} info - Metadata of the processed image.
-* @param {string} imgFormat - The image format (e.g., webp, jpeg).
-* @param {number} originalSize - Original size of the input image.
-*/
+ * Sets headers for the compressed image response.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {object} info - Metadata of the processed image.
+ * @param {string} imgFormat - The image format (e.g., webp, jpeg).
+ * @param {number} originalSize - Original size of the input image.
+ */
 function setResponseHeaders(res, info, imgFormat, originalSize) {
-  res.setHeader('content-type', `image/${imgFormat}`);
-  res.setHeader('content-length', info.size);
-  res.setHeader('x-original-size', originalSize);
-  res.setHeader('x-bytes-saved', originalSize - info.size);
+    res.setHeader('content-type', `image/${imgFormat}`);
+    res.setHeader('content-length', info.size);
+    res.setHeader('x-original-size', originalSize);
+    res.setHeader('x-bytes-saved', originalSize - info.size);
 }
+
 
 /**
  * Main proxy handler for bandwidth optimization.

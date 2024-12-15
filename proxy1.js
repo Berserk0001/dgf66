@@ -10,7 +10,6 @@ import { availableParallelism } from 'os';
 const DEFAULT_QUALITY = 40;
 const MIN_COMPRESS_LENGTH = 1024;
 const MIN_TRANSPARENT_COMPRESS_LENGTH = MIN_COMPRESS_LENGTH * 100;
-const MAX_HEIGHT = 16383;
 const USER_AGENT = "Bandwidth-Hero Compressor";
 
 /**
@@ -111,21 +110,12 @@ function redirect(req, res) {
 
   input.pipe(sharpInstance);
 }*/
-import { Writable } from 'stream';
 
 /**
  * Converts a readable stream into a buffer.
  * @param {Readable} stream - The input stream.
  * @returns {Promise<Buffer>} - A promise that resolves to a buffer.
  */
-function streamToBuffer(stream) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    stream.on('data', chunk => chunks.push(chunk));
-    stream.on('end', () => resolve(Buffer.concat(chunks)));
-    stream.on('error', reject);
-  });
-}
 
 /**
  * Compresses an image and sends the response.
@@ -133,35 +123,69 @@ function streamToBuffer(stream) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {Readable} inputStream - The input image stream.
  */
-async function compress(req, res, inputStream) {
-  try {
-    const inputBuffer = await streamToBuffer(inputStream); // Convert the stream to a buffer
-    const format = req.params.webp ? 'webp' : 'jpeg';
+function compress(req, res, inputStream) {
+  const format = req.params.webp ? 'webp' : 'jpeg';
 
-    sharp(inputBuffer)
+  // Initialize sharp pipeline
+  const image = sharp()
       .grayscale(req.params.grayscale)
-      .toFormat(format, {
-        quality: req.params.quality,
-        progressive: true,
-        optimizeScans: true
+      .resize({
+          width: null,
+          height: req.params.resizeHeight || null, // Optional resizing
       })
-      .toBuffer((err, output, info) => {
-        if (err || !info || res.headersSent) return redirect(req, res);
-
-        res.setHeader('content-type', `image/${format}`);
-        res.setHeader('content-length', info.size);
-        res.setHeader('x-original-size', req.params.originSize);
-        res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-       // res.status(200);
-        res.write(output);
-        res.end();
+      .toFormat(format, {
+          quality: req.params.quality,
+          effort: 0, // For WebP, set compression effort to minimal
       });
-  } catch (err) {
-    console.error('Error during compression:', err.message);
-    redirect(req, res);
-  }
+
+  // Get metadata to handle height adjustments or other pre-processing
+  inputStream
+      .pipe(sharp().metadata((err, metadata) => {
+          if (err) {
+              console.error("Error fetching metadata:", err.message);
+              return redirect(req, res);
+          }
+
+          // Adjust resizeHeight if the image exceeds WebP's max height
+          if (metadata.height >= 16383) {
+              req.params.resizeHeight = 16383;
+          }
+      }))
+      .on('error', (err) => {
+          console.error("Error during metadata extraction:", err.message);
+          redirect(req, res);
+      });
+
+  // Process the input stream
+  inputStream
+      .pipe(image)
+      .on('info', (info) => {
+          // Set headers for the processed image
+          setResponseHeaders(res, info, format, req.params.originSize);
+      })
+      .on('error', (err) => {
+          console.error("Error during image processing:", err.message);
+          redirect(req, res);
+      })
+      .pipe(res)
+      .on('finish', () => {
+          res.status(200).end();
+      });
 }
 
+/**
+* Sets headers for the compressed image response.
+* @param {http.ServerResponse} res - The HTTP response.
+* @param {object} info - Metadata of the processed image.
+* @param {string} imgFormat - The image format (e.g., webp, jpeg).
+* @param {number} originalSize - Original size of the input image.
+*/
+function setResponseHeaders(res, info, imgFormat, originalSize) {
+  res.setHeader('content-type', `image/${imgFormat}`);
+  res.setHeader('content-length', info.size);
+  res.setHeader('x-original-size', originalSize);
+  res.setHeader('x-bytes-saved', originalSize - info.size);
+}
 
 /**
  * Main proxy handler for bandwidth optimization.

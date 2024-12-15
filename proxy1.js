@@ -58,7 +58,7 @@ function redirect(req, res) {
   res.removeHeader('date');
   res.removeHeader('etag');
   res.setHeader('location', encodeURI(req.params.url));
-  res.status(302).end();
+  res.statusCode(302).end();
 }
 
 /**
@@ -126,7 +126,7 @@ function compress(req, res, input) {
             res.setHeader('content-length', info.size);
             res.setHeader('x-original-size', req.params.originSize);
             res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-            res.status(200);
+            res.statusCode(200);
             res.write(output);
             res.end()
         })

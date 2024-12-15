@@ -134,6 +134,7 @@ function compress(req, res, inputStream) {
       .resize({
           width: resizeWidth,
           height: resizeHeight, // Optional resizing
+         withoutEnlargement: true
       })
       .toFormat(format, {
           quality: req.params.quality,

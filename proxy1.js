@@ -152,7 +152,7 @@ async function compress(req, res, inputStream) {
         res.setHeader('content-length', info.size);
         res.setHeader('x-original-size', req.params.originSize);
         res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-        res.status(200);
+       // res.status(200);
         res.write(output);
         res.end();
       });

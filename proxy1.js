@@ -172,10 +172,7 @@ function compress(req, res, inputStream) {
                     console.error("Error during image processing:", err.message);
                     redirect(req, res);
                 })
-                .pipe(res)
-                .on('finish', () => {
-                    res.status(200).end();
-                });
+                .pipe(res);
         })
         .catch((err) => {
             console.error("Error fetching metadata:", err.message);

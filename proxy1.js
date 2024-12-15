@@ -192,8 +192,8 @@ function compress(req, res, inputStream) {
 function setResponseHeaders(res, info, imgFormat, originalSize) {
     res.setHeader('content-type', `image/${imgFormat}`);
     res.setHeader('content-length', info.size);
-    res.setHeader('x-original-size', originalSize);
-    res.setHeader('x-bytes-saved', originalSize - info.size);
+    res.setHeader('x-original-size', req.params.originSize);
+    res.setHeader('x-bytes-saved', req.params.originSize - info.size);
 }
 
 

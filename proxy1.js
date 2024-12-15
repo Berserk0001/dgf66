@@ -135,50 +135,66 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
+/**
+ * Compresses the input image stream and pipes the output to the response.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {stream.Readable} inputStream - The input stream of image data.
+ */
 function compress(req, res, inputStream) {
     const format = req.params.webp ? 'webp' : 'jpeg';
-    const sharpInstance = sharp();
+    const compressionQuality = req.params.quality;
 
-    // Pipe the input stream into sharp instance
-    inputStream.pipe(sharpInstance);
-
-    // Process metadata and conditionally apply transformations
-    sharpInstance
+    const transformer = sharp()
         .metadata()
-        .then((metadata) => {
-            // Resize if the height exceeds the maximum limit
-            if (metadata.height > 16383) {
-                sharpInstance.resize({
-                    width: null,
-                    height: 16383,
-                    withoutEnlargement: true,
-                });
+        .then(metadata => {
+            let resizeWidth = null;
+            let resizeHeight = null;
+
+            // Handle longstrip images exceeding WebP height limit
+            if (metadata.height >= 16383) {
+                resizeHeight = 16383;
             }
 
-            // Apply other transformations
-            return sharpInstance
+            return sharp()
+                .resize({
+                    width: resizeWidth,
+                    height: resizeHeight
+                })
                 .grayscale(req.params.grayscale)
                 .toFormat(format, {
-                    quality: req.params.quality,
-                    effort: 0, // Minimal compression effort for WebP
-                })
-                .on('info', (info) => {
-                    // Set response headers once processing is complete
-                    res.writeHead(200, {
-                        'content-type': `image/${format}`,
-                        'content-length': info.size,
-                        'x-original-size': req.params.originSize,
-                        'x-bytes-saved': req.params.originSize - info.size,
-                    });
+                    quality: compressionQuality,
+                    effort: 0
                 });
-        })
-        .catch((err) => {
-            console.error('Error processing image:', err.message);
-            redirect(req, res);
         });
 
-    // Pipe the output from sharp instance to the response
-    sharpInstance.pipe(res).on('finish', () => res.end());
+    // Set response headers after transformation
+    transformer.on('info', info => {
+        setResponseHeaders(res, info, format, req.params.originSize);
+    });
+
+    // Handle errors
+    transformer.on('error', err => {
+        console.error("Error processing image:", err.message);
+        redirect(req, res);
+    });
+
+    // Pipe input to transformer and transformer to response
+    inputStream.pipe(transformer).pipe(res);
+
+    /**
+     * Sets headers for the compressed image response.
+     * @param {http.ServerResponse} res - The HTTP response.
+     * @param {object} info - Metadata of the processed image.
+     * @param {string} imgFormat - The image format (e.g., webp, jpeg).
+     * @param {number} originalSize - Original size of the input image.
+     */
+    function setResponseHeaders(res, info, imgFormat, originalSize) {
+        res.setHeader('content-type', `image/${imgFormat}`);
+        res.setHeader('content-length', info.size);
+        res.setHeader('x-original-size', originalSize);
+        res.setHeader('x-bytes-saved', originalSize - info.size);
+    }
 }
 
 

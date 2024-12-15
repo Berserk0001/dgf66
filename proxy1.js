@@ -156,6 +156,7 @@ function compress(req, res, inputStream) {
                     image.resize({
                         width: resizeWidth,
                         height: resizeHeight,
+                        withoutEnlargement: true
                     })
                     .grayscale(req.params.grayscale)
                     .toFormat(format, {

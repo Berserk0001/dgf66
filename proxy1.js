@@ -66,7 +66,7 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {http.IncomingMessage} input - The input stream for image data.
  */
-/*function compress(req, res, input) {
+function compress(req, res, input) {
   const format = req.params.webp ? "webp" : "jpeg";
   const sharpInstance = sharp({
     unlimited: true,
@@ -109,52 +109,6 @@ function redirect(req, res) {
     });
 
   input.pipe(sharpInstance);
-}*/
-function compress(req, res, input) {
-  const format = 'webp';
-  sharp.cache(false);
-  sharp.concurrency(0);
-    const image = sharp(input);
-
-    image.metadata((err, metadata) => {
-        if (err) {
-            return redirect(req, res);
-        }
-
-        let resizeWidth = null;
-        let resizeHeight = null;
-        let compressionQuality = req.params.quality;
-
-        // Workaround for webp max res limit by resizing
-        if (metadata.height >= 16383) { // Longstrip webtoon/manhwa/manhua
-            resizeHeight = 16383;
-        }
-
-        sharp(input)
-            .resize({
-                width: resizeWidth,
-                height: resizeHeight
-            })
-            .grayscale(req.params.grayscale)
-            .toFormat(format, {
-                quality: compressionQuality,
-                effort: 0
-            })
-            .toBuffer((err, output, info) => {
-                if (err || res.headersSent) return redirect(req, res);
-                setResponseHeaders(info, format);
-                res.status(200);
-                res.write(output);
-                res.end();
-            });
-    });
-
-    function setResponseHeaders(info, imgFormat) {
-        res.setHeader('content-type', `image/${imgFormat}`);
-        res.setHeader('content-length', info.size);
-        res.setHeader('x-original-size', req.params.originSize);
-        res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-    }
 }
 
 /**

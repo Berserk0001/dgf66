@@ -125,13 +125,15 @@ function redirect(req, res) {
  */
 function compress(req, res, inputStream) {
   const format = req.params.webp ? 'webp' : 'jpeg';
+  let resizeWidth = null;
+   let resizeHeight = null;
 
   // Initialize sharp pipeline
   const image = sharp()
       .grayscale(req.params.grayscale)
       .resize({
-          width: null,
-          height: 16383, // Optional resizing
+          width: resizeWidth,
+          height: resizeHeight, // Optional resizing
       })
       .toFormat(format, {
           quality: req.params.quality,
@@ -148,7 +150,7 @@ function compress(req, res, inputStream) {
 
           // Adjust resizeHeight if the image exceeds WebP's max height
           if (metadata.height >= 16383) {
-              req.params.resizeHeight = 16383;
+              resizeHeight = 16383;
           }
       }))
       .on('error', (err) => {

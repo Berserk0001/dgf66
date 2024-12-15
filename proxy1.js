@@ -141,11 +141,28 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
+import sharp from 'sharp';
+
+/**
+ * Compresses the input image stream and pipes the output to the response.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {stream.Readable} inputStream - The input stream of image data.
+ */
 function compress(req, res, inputStream) {
     const format = req.params.webp ? 'webp' : 'jpeg';
     const compressionQuality = req.params.quality;
 
+    // Create a Sharp instance for transformations
     const transformer = sharp()
+        .grayscale(req.params.grayscale)
+        .toFormat(format, {
+            quality: compressionQuality,
+            effort: 0
+        });
+
+    // Use metadata to decide on resizing
+    sharp(inputStream)
         .metadata()
         .then(metadata => {
             let resizeWidth = null;
@@ -156,46 +173,30 @@ function compress(req, res, inputStream) {
                 resizeHeight = 16383;
             }
 
-            return sharp()
-                .resize({
-                    width: resizeWidth,
-                    height: resizeHeight
-                })
-                .grayscale(req.params.grayscale)
-                .toFormat(format, {
-                    quality: compressionQuality,
-                    effort: 0
-                });
+            // Apply resizing if necessary
+            transformer.resize({
+                width: resizeWidth,
+                height: resizeHeight
+            });
+
+            // Set headers and pipe transformed stream to response
+            res.setHeader('content-type', `image/${format}`);
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+            res.setHeader('Cross-Origin-Embedder-Policy', 'unsafe-none');
+            inputStream.pipe(transformer).pipe(res);
+        })
+        .catch(err => {
+            console.error("Error fetching metadata or processing image:", err.message);
+            redirect(req, res);
         });
 
-    // Set response headers after transformation
-    transformer.on('info', info => {
-        setResponseHeaders(res, info, format, req.params.originSize);
-    });
-
-    // Handle errors
-    transformer.on('error', err => {
-        console.error("Error processing image:", err.message);
+    inputStream.on('error', err => {
+        console.error("Error reading stream:", err.message);
         redirect(req, res);
     });
-
-    // Pipe input to transformer and transformer to response
-    inputStream.pipe(transformer).pipe(res);
-
-    /**
-     * Sets headers for the compressed image response.
-     * @param {http.ServerResponse} res - The HTTP response.
-     * @param {object} info - Metadata of the processed image.
-     * @param {string} imgFormat - The image format (e.g., webp, jpeg).
-     * @param {number} originalSize - Original size of the input image.
-     */
-    function setResponseHeaders(res, info, imgFormat, originalSize) {
-        res.setHeader('content-type', `image/${imgFormat}`);
-        res.setHeader('content-length', info.size);
-        res.setHeader('x-original-size', originalSize);
-        res.setHeader('x-bytes-saved', originalSize - info.size);
-    }
 }
+
 
 
 

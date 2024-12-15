@@ -129,70 +129,58 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
+/**
+ * Compresses the input image stream and sends the processed image in the response.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {stream.Readable} inputStream - The input stream of image data.
+ */
 function compress(req, res, inputStream) {
-    // First, fetch metadata from the image
-    const image = sharp();
-    const metadataImage = sharp();
+    const format = req.params.webp ? 'webp' : 'jpeg';
+    const sharpInstance = sharp();
 
-    inputStream
-        .pipe(metadataImage)
+    // Pipe the input stream into sharp instance
+    inputStream.pipe(sharpInstance);
+
+    // Process metadata and conditionally apply transformations
+    sharpInstance
         .metadata()
         .then((metadata) => {
-            // Set resize parameters based on metadata
-            let resizeWidth = null;
-            let resizeHeight = null;
-
-            // Handle longstrip images exceeding WebP height limit
-            if (metadata.height >= 16383) {
-                resizeHeight = 16383;
+            // Resize if the height exceeds the maximum limit
+            if (metadata.height > MAX_HEIGHT) {
+                sharpInstance.resize({
+                    width: null,
+                    height: MAX_HEIGHT,
+                    withoutEnlargement: true,
+                });
             }
 
-            const format = req.params.webp ? 'webp' : 'jpeg';
-            const compressionQuality = req.params.quality;
-
-            // Reprocess the input stream
-            inputStream
-                .pipe(
-                    image.resize({
-                        width: resizeWidth,
-                        height: resizeHeight,
-                        withoutEnlargement: true
-                    })
-                    .grayscale(req.params.grayscale)
-                    .toFormat(format, {
-                        quality: compressionQuality,
-                        effort: 0,
-                    })
-                )
+            // Apply other transformations
+            return sharpInstance
+                .grayscale(req.params.grayscale)
+                .toFormat(format, {
+                    quality: req.params.quality,
+                    effort: 0, // Minimal compression effort for WebP
+                })
                 .on('info', (info) => {
-                    // Set response headers
-                    setResponseHeaders(res, info, format, req.params.originSize);
-                })
-                .on('error', (err) => {
-                    console.error("Error during image processing:", err.message);
-                    redirect(req, res);
-                })
-                .pipe(res);
+                    // Set response headers once processing is complete
+                    res.writeHead(200, {
+                        'content-type': `image/${format}`,
+                        'content-length': info.size,
+                        'x-original-size': req.params.originSize,
+                        'x-bytes-saved': req.params.originSize - info.size,
+                    });
+                });
         })
         .catch((err) => {
-            console.error("Error fetching metadata:", err.message);
+            console.error('Error processing image:', err.message);
             redirect(req, res);
         });
+
+    // Pipe the output from sharp instance to the response
+    sharpInstance.pipe(res).on('finish', () => res.end());
 }
 
-/**
- * Sets headers for the compressed image response.
- * @param {http.ServerResponse} res - The HTTP response.
- * @param {object} info - Metadata of the processed image.
- * @param {string} imgFormat - The image format (e.g., webp, jpeg).
- * @param {number} originalSize - Original size of the input image.
- */
-function setResponseHeaders(res, info, imgFormat, originalSize) {
-    res.setHeader('content-type', `image/${imgFormat}`);
-    res.setHeader('content-length', info.size);
-    res.setHeader('x-original-size', req.params.originSize);
-    res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-}
 
 
 /**

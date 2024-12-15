@@ -150,7 +150,7 @@ function compress(req, res, inputStream) {
             if (metadata.height > MAX_HEIGHT) {
                 sharpInstance.resize({
                     width: null,
-                    height: MAX_HEIGHT,
+                    height: 16383,
                     withoutEnlargement: true,
                 });
             }

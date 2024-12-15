@@ -133,7 +133,8 @@ function compress(req, res, inputStream) {
       .grayscale(req.params.grayscale)
       .resize({
           width: resizeWidth,
-          height: resizeHeight, // Optional resizing
+          height: 16383, // Optional resizing
+        withoutEnlargement: true
       })
       .toFormat(format, {
           quality: req.params.quality,

@@ -174,7 +174,7 @@ function compress(req, res, inputStream) {
                 })
                 .pipe(res)
                 .on('finish', () => {
-                    res.end();
+                    res.status(200).end();
                 });
         })
         .catch((err) => {

@@ -111,25 +111,57 @@ function redirect(req, res) {
 
   input.pipe(sharpInstance);
 }*/
-function compress(req, res, input) {
-    const format = req.params.webp ? 'webp' : 'jpeg';
-    sharp(input)
-        .grayscale(req.params.grayscale)
-        .toFormat(format, {
-            quality: req.params.quality,
-            progressive: true,
-            optimizeScans: true
-        })
-        .toBuffer((err, output, info) => {
-            if (err || !info || res.headersSent) return redirect(req, res);
-            res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', info.size);
-            res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-            res.write(output);
-            res.end()
-        })
+import { Writable } from 'stream';
+
+/**
+ * Converts a readable stream into a buffer.
+ * @param {Readable} stream - The input stream.
+ * @returns {Promise<Buffer>} - A promise that resolves to a buffer.
+ */
+function streamToBuffer(stream) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    stream.on('data', chunk => chunks.push(chunk));
+    stream.on('end', () => resolve(Buffer.concat(chunks)));
+    stream.on('error', reject);
+  });
 }
+
+/**
+ * Compresses an image and sends the response.
+ * @param {http.IncomingMessage} req - The incoming HTTP request.
+ * @param {http.ServerResponse} res - The HTTP response.
+ * @param {Readable} inputStream - The input image stream.
+ */
+async function compress(req, res, inputStream) {
+  try {
+    const inputBuffer = await streamToBuffer(inputStream); // Convert the stream to a buffer
+    const format = req.params.webp ? 'webp' : 'jpeg';
+
+    sharp(inputBuffer)
+      .grayscale(req.params.grayscale)
+      .toFormat(format, {
+        quality: req.params.quality,
+        progressive: true,
+        optimizeScans: true
+      })
+      .toBuffer((err, output, info) => {
+        if (err || !info || res.headersSent) return redirect(req, res);
+
+        res.setHeader('content-type', `image/${format}`);
+        res.setHeader('content-length', info.size);
+        res.setHeader('x-original-size', req.params.originSize);
+        res.setHeader('x-bytes-saved', req.params.originSize - info.size);
+        res.status(200);
+        res.write(output);
+        res.end();
+      });
+  } catch (err) {
+    console.error('Error during compression:', err.message);
+    redirect(req, res);
+  }
+}
+
 
 /**
  * Main proxy handler for bandwidth optimization.

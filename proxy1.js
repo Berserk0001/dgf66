@@ -141,8 +141,6 @@ function redirect(req, res) {
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
-import sharp from 'sharp';
-
 /**
  * Compresses the input image stream and pipes the output to the response.
  * @param {http.IncomingMessage} req - The incoming HTTP request.

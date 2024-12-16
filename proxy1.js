@@ -111,38 +111,41 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
-function compress(req, res, input) {
+function compress(req, res, inputStream) {
     const format = req.params.webp ? 'webp' : 'jpeg';
 
-    input.pipe(sharp()) // Pipe the input stream to sharp
-        .metadata()
-        .then(metadata => {
-            // Set resize height to null by default, limit to 16383 if it exceeds that value
-            const resizeHeight = metadata.height > 16383 ? 16383 : null;
+    // Set headers in advance
+    res.setHeader('content-type', `image/${format}`);
+    res.setHeader('x-original-size', req.params.originSize);
 
-            // Set response headers
-            res.setHeader('content-type', `image/${format}`);
-            res.setHeader('x-original-size', req.params.originSize);
+    // Pipe the input stream to Sharp
+    inputStream
+        .pipe(
+            sharp()
+                .metadata()
+                .then(metadata => {
+                    const resizeHeight = metadata.height > 16383 ? 16383 : null;
 
-            // Pipe the image processing stream directly to the response
-            input.pipe(sharp())
-                .resize({ height: resizeHeight }) // Apply height constraint if necessary
-                .grayscale(req.params.grayscale)
-                .toFormat(format, {
-                    quality: req.params.quality,
-                    progressive: true,
-                    optimizeScans: true
+                    // Return a new Sharp instance for the transform pipeline
+                    return sharp()
+                        .resize({ height: resizeHeight }) // Apply resizing
+                        .grayscale(req.params.grayscale) // Apply grayscale if specified
+                        .toFormat(format, {
+                            quality: req.params.quality,
+                            progressive: true,
+                            optimizeScans: true,
+                        });
                 })
-                .on('info', info => {
-                    // Set additional headers once info is available
-                    res.setHeader('content-length', info.size);
-                    res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-                })
-                .on('error', () => redirect(req, res)) // Redirect on error
-                .pipe(res); // Pipe the output directly to the response
+        )
+        .on('info', info => {
+            // Set response size headers dynamically
+            res.setHeader('content-length', info.size);
+            res.setHeader('x-bytes-saved', req.params.originSize - info.size);
         })
-        .catch(() => redirect(req, res)); // Handle metadata errors
+        .on('error', () => redirect(req, res)) // Redirect on stream error
+        .pipe(res); // Pipe output to response
 }
+
 
 
 

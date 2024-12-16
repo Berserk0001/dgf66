@@ -118,64 +118,67 @@ function redirect(req, res) {
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
 function compress(req, res, inputStream) {
-    const chunks = [];
-    
-    // Collect stream data into chunks
-    inputStream.on('data', chunk => chunks.push(chunk));
-    
-    inputStream.on('end', () => {
-        // Convert chunks to buffer
-        const inputBuffer = Buffer.concat(chunks);
-        
-        const image = sharp(inputBuffer);
+    const image = sharp();
 
-        // Fetch metadata from the image
-        image.metadata((err, metadata) => {
-            if (err) {
-                console.error("Error fetching metadata:", err.message);
-                return redirect(req, res);
-            }
+    // Pipe the input stream to the sharp instance
+    inputStream.pipe(image);
 
-            let resizeWidth = null;
-            let resizeHeight = null;
-            const compressionQuality = req.params.quality;
-            const format = req.params.webp ? 'webp' : 'jpeg';
+    const format = req.params.webp ? 'webp' : 'jpeg';
+    let resizeWidth = null;
+    let resizeHeight = null;
 
-            // Handle longstrip images exceeding WebP height limit
-            if (metadata.height >= 16383) {
-                resizeHeight = 16383;
-            }
+    // Determine resize dimensions based on metadata
+    image.metadata((err, metadata) => {
+        if (err) {
+            console.error("Error fetching metadata:", err.message);
+            return redirect(req, res);
+        }
 
-            // Start processing the image
-            image
-                .resize({
-                    width: resizeWidth,
-                    height: resizeHeight
-                })
-                .grayscale(req.params.grayscale)
-                .toFormat(format, {
-                    quality: compressionQuality,
-                    effort: 0
-                })
-                .toBuffer((err, output, info) => {
-                    if (err || res.headersSent) {
-                        console.error("Error processing image:", err?.message);
-                        return redirect(req, res);
-                    }
+        if (metadata.height >= 16383) { // Handle longstrip images
+            resizeHeight = 16383;
+        }
 
-                    // Set response headers and send the compressed image
-                    setResponseHeaders(res, info, format, req.params.originSize);
-                    res.status(200);
-                    res.write(output);
-                    res.end();
-                });
+        // Apply transformations and set output format
+        const transformer = image
+            .resize({ width: resizeWidth, height: resizeHeight })
+            .grayscale(req.params.grayscale)
+            .toFormat(format, {
+                quality: req.params.quality,
+                effort: 0
+            });
+
+        // Set headers for streaming
+        res.setHeader('content-type', `image/${format}`);
+        res.setHeader('x-original-size', req.params.originSize);
+
+        // Use a transform stream to calculate bytes saved while streaming
+        let bytesSaved = 0;
+        transformer.on('info', info => {
+            res.setHeader('content-length', info.size);
+            bytesSaved = req.params.originSize - info.size;
+            res.setHeader('x-bytes-saved', bytesSaved);
+        });
+
+        // Pipe the processed image directly to the response
+        transformer.pipe(res);
+
+        // Handle errors
+        transformer.on('error', err => {
+            console.error("Error during transformation:", err.message);
+            if (!res.headersSent) redirect(req, res);
+        });
+
+        res.on('close', () => {
+            console.log(`Compression completed. Bytes saved: ${bytesSaved}`);
         });
     });
 
     inputStream.on('error', err => {
-        console.error("Error reading stream:", err.message);
+        console.error("Error reading input stream:", err.message);
         redirect(req, res);
     });
+}
+
 
     /**
      * Sets headers for the compressed image response.

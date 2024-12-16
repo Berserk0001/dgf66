@@ -126,15 +126,14 @@ function compress(req, res, input) {
                 return redirect(req, res);
             }
 
-            if (metadata.height && metadata.height > maxHeight) {
+            if (metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
 
             transformer
                 .toFormat(format, {
                     quality: parseInt(req.params.quality),
-                    progressive: true,
-                    optimizeScans: true
+                    effort: 0
                 })
                 .toBuffer((err, output, info) => {
                     if (err || !info || res.headersSent) {

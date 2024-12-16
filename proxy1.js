@@ -133,7 +133,7 @@ function compress(req, res, input) {
             if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-            return transformer.toBuffer();
+            //return transformer.toBuffer();
         })
         .then(data => {
            // const info = transformer.options;

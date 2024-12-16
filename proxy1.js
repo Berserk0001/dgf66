@@ -111,43 +111,41 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
+
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
     const maxHeight = 16383;
+    const quality = parseInt(req.params.quality);
+    const grayscale = !!req.params.grayscale;
 
     const transformer = sharp()
-        .grayscale(req.params.grayscale);
+        .grayscale(grayscale)
+        .toFormat(format, {
+            quality,
+            progressive: true,
+            optimizeScans: true,
+          effort:0
+        });
 
-    // Pipe the input stream through transformer
     input
         .pipe(transformer)
-        .metadata((err, metadata) => {
-            if (err) {
-                return redirect(req, res);
-            }
-
-            if (metadata.height > maxHeight) {
+        .metadata()
+        .then(metadata => {
+            if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-
-            transformer
-                .toFormat(format, {
-                    quality: parseInt(req.params.quality),
-                    effort: 0
-                })
-                .toBuffer((err, output, info) => {
-                    if (err || !info || res.headersSent) {
-                        return redirect(req, res);
-                    }
-                    
-                    res.setHeader('content-type', `image/${format}`);
-                    res.setHeader('content-length', info.size);
-                    res.setHeader('x-original-size', req.params.originSize);
-                    res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-                    res.status(200);
-                    res.write(output);
-                    res.end();
-                });
+            return transformer.toBuffer();
+        })
+        .then(buffer => {
+            const info = transformer.options;
+            res.setHeader('content-type', `image/${format}`);
+            res.setHeader('content-length', buffer.length);
+            res.setHeader('x-original-size', req.params.originSize);
+            res.setHeader('x-bytes-saved', req.params.originSize - buffer.length);
+            res.status(200).end(buffer);
+        })
+        .catch(err => {
+            redirect(req, res);
         });
 }
 

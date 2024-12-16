@@ -135,7 +135,8 @@ function compress(req, res, input) {
             }
             //return transformer.toBuffer();
         })
-        .then(data => {
+      .pipe(res);
+     /*   .then(data => {
            // const info = transformer.options;
             res.setHeader('content-type', `image/${format}`);
             res.setHeader('content-length', data.length);
@@ -145,7 +146,7 @@ function compress(req, res, input) {
         })
         .catch(err => {
             redirect(req, res);
-        });
+        });*/
 }
 
 

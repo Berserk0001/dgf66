@@ -112,73 +112,58 @@ function redirect(req, res) {
 }*/
 
 /**
- * Compresses the input image stream and sends the processed image in the response.
+ * Compresses the incoming image stream and sends the processed image.
  * @param {http.IncomingMessage} req - The incoming HTTP request.
  * @param {http.ServerResponse} res - The HTTP response.
  * @param {stream.Readable} inputStream - The input stream of image data.
  */
 function compress(req, res, inputStream) {
-    const image = sharp();
-
-    // Pipe the input stream to the sharp instance
-    inputStream.pipe(image);
-
     const format = req.params.webp ? 'webp' : 'jpeg';
+    const compressionQuality = req.params.quality;
+
     let resizeWidth = null;
     let resizeHeight = null;
 
-    // Determine resize dimensions based on metadata
-    image.metadata((err, metadata) => {
-        if (err) {
+    // Set up a Sharp pipeline to process the image
+    const transformer = sharp()
+        .metadata()
+        .then(metadata => {
+            // Handle longstrip images exceeding WebP height limit
+            if (metadata.height >= 16383) {
+                resizeHeight = 16383;
+            }
+
+            // Create a new sharp instance with transformations
+            return sharp()
+                .resize({
+                    width: resizeWidth,
+                    height: resizeHeight
+                })
+                .grayscale(req.params.grayscale)
+                .toFormat(format, {
+                    quality: compressionQuality,
+                    effort: 0
+                });
+        })
+        .catch(err => {
             console.error("Error fetching metadata:", err.message);
-            return redirect(req, res);
-        }
-
-        if (metadata.height >= 16383) { // Handle longstrip images
-            resizeHeight = 16383;
-        }
-
-        // Apply transformations and set output format
-        const transformer = image
-            .resize({ width: resizeWidth, height: resizeHeight })
-            .grayscale(req.params.grayscale)
-            .toFormat(format, {
-                quality: req.params.quality,
-                effort: 0
-            });
-
-        // Set headers for streaming
-        res.setHeader('content-type', `image/${format}`);
-        res.setHeader('x-original-size', req.params.originSize);
-
-        // Use a transform stream to calculate bytes saved while streaming
-        let bytesSaved = 0;
-        transformer.on('info', info => {
-            res.setHeader('content-length', info.size);
-            bytesSaved = req.params.originSize - info.size;
-            res.setHeader('x-bytes-saved', bytesSaved);
+            redirect(req, res);
         });
 
-        // Pipe the processed image directly to the response
-        transformer.pipe(res);
-
-        // Handle errors
-        transformer.on('error', err => {
-            console.error("Error during transformation:", err.message);
-            if (!res.headersSent) redirect(req, res);
-        });
-
-        res.on('close', () => {
-            console.log(`Compression completed. Bytes saved: ${bytesSaved}`);
-        });
+    // Set response headers for the output
+    transformer.on("info", info => {
+        setResponseHeaders(res, info, format, req.params.originSize);
     });
 
-    inputStream.on('error', err => {
-        console.error("Error reading input stream:", err.message);
-        redirect(req, res);
-    });
-}
-
+    // Pipe input stream through Sharp and directly to the response
+    inputStream
+        .pipe(transformer)
+        .pipe(res)
+        .on("finish", () => res.end())
+        .on("error", err => {
+            console.error("Error processing stream:", err.message);
+            redirect(req, res);
+        });
 
     /**
      * Sets headers for the compressed image response.
@@ -188,12 +173,13 @@ function compress(req, res, inputStream) {
      * @param {number} originalSize - Original size of the input image.
      */
     function setResponseHeaders(res, info, imgFormat, originalSize) {
-        res.setHeader('content-type', `image/${imgFormat}`);
-        res.setHeader('content-length', info.size);
-        res.setHeader('x-original-size', originalSize);
-        res.setHeader('x-bytes-saved', originalSize - info.size);
+        res.setHeader("content-type", `image/${imgFormat}`);
+        res.setHeader("content-length", info.size);
+        res.setHeader("x-original-size", originalSize);
+        res.setHeader("x-bytes-saved", originalSize - info.size);
     }
 }
+
 
 
 

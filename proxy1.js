@@ -114,12 +114,11 @@ function redirect(req, res) {
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
 
-    // Create a sharp instance for processing
-    const transformer = sharp();
+    const transform = sharp();
 
-    input.pipe(transformer);
+    input.pipe(transform);
 
-    transformer
+    transform
         .metadata()
         .then(metadata => {
             // Determine resize height (limit to 16383 if necessary)
@@ -129,19 +128,19 @@ function compress(req, res, input) {
             res.setHeader('content-type', `image/${format}`);
             res.setHeader('x-original-size', req.params.originSize);
 
-            // Process and pipe the image
-            input
-                .pipe(
-                    sharp()
-                        .resize({ height: resizeHeight }) // Resize if needed
-                        .grayscale(!!req.params.grayscale) // Apply grayscale if specified
-                        .toFormat(format, {
-                            quality: req.params.quality || 80, // Default quality
-                            progressive: true,
-                            optimizeScans: true,
-                            effort: 4, // Optimize compression
-                        })
-                )
+            // Apply transformations and return the stream
+            return transform
+                .resize({ height: resizeHeight }) // Resize if needed
+                .grayscale(!!req.params.grayscale) // Apply grayscale if specified
+                .toFormat(format, {
+                    quality: req.params.quality || 80, // Default quality
+                    progressive: true,
+                    optimizeScans: true,
+                });
+        })
+        .then(() => {
+            // Pipe the output to the response
+            transform
                 .on('info', info => {
                     // Set additional headers once info is available
                     res.setHeader('content-length', info.size);
@@ -151,16 +150,13 @@ function compress(req, res, input) {
                     console.error('Error during image transformation:', err);
                     redirect(req, res);
                 })
-                .pipe(res); // Pipe the output directly to the response
+                .pipe(res);
         })
         .catch(err => {
             console.error('Error retrieving metadata:', err);
             redirect(req, res);
         });
 }
-
-
-
 
 
 

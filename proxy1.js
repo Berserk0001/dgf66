@@ -111,40 +111,51 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
+
+
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
-    const maxHeight = 16383;
-    const quality = parseInt(req.params.quality);
-    const grayscale = !!req.params.grayscale;
+    const transform = sharp();
 
-    const transformer = sharp()
-        .grayscale(grayscale)
-        .toFormat(format, {
-            quality,
-            progressive: true,
-            optimizeScans: true
-        });
+    input.pipe(transform);
 
-    input
-        .pipe(transformer)
-        .metadata()
+    transform.metadata()
         .then(metadata => {
-            if (metadata.height && metadata.height > maxHeight) {
-                transformer.resize(null, maxHeight);
+            // Resize if height exceeds 16383 pixels
+            if (metadata.height > 16383) {
+                transform.resize({ height: 16383, width: null });
             }
-            return transformer.toBuffer({ resolveWithObject: true });
+
+            // Apply grayscale and format transformations
+            return transform.grayscale(req.params.grayscale)
+                .toFormat(format, {
+                    quality: req.params.quality,
+                    progressive: true,
+                    optimizeScans: true
+                });
         })
-        .then(({ data, info }) => {
+        .then(() => {
+            // Set headers for streaming the image
             res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', data.length);
             res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
-            res.status(200).end(data);
+
+            // Pipe the transformed image directly to the client
+            transform.on('info', info => {
+                res.setHeader('content-length', info.size);
+                res.setHeader('x-bytes-saved', req.params.originSize - info.size);
+            });
+
+            transform.pipe(res).on('error', err => {
+                console.error('Error while streaming:', err);
+                redirect(req, res);
+            });
         })
         .catch(err => {
+            console.error('Error processing image:', err);
             redirect(req, res);
         });
 }
+
 
 /**
  * Main proxy handler for bandwidth optimization.

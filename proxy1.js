@@ -122,7 +122,8 @@ function compress(req, res, input) {
         .toFormat(format, {
             quality,
             progressive: true,
-            optimizeScans: true
+            optimizeScans: true,
+          effort: 0
         });
 
     input

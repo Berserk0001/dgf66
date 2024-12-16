@@ -122,18 +122,18 @@ function compress(req, res, input) {
         .metadata()
         .then(metadata => {
             // Determine resize height (limit to 16383 if necessary)
-            const resizeHeight = metadata.height > 16383 ? 16383 : null;
-
+            if (metadata.height > 16383) {
+                transform.resize({ height: 16383 });
+            }
             // Set response headers early
             res.setHeader('content-type', `image/${format}`);
             res.setHeader('x-original-size', req.params.originSize);
 
             // Apply transformations and return the stream
             return transform
-                .resize({ height: resizeHeight }) // Resize if needed
                 .grayscale(!!req.params.grayscale) // Apply grayscale if specified
                 .toFormat(format, {
-                    quality: req.params.quality || 80, // Default quality
+                    quality: req.params.quality, // Default quality
                     progressive: true,
                     optimizeScans: true,
                     effort: 0

@@ -136,6 +136,7 @@ function compress(req, res, input) {
                     quality: req.params.quality || 80, // Default quality
                     progressive: true,
                     optimizeScans: true,
+                    effort: 0
                 });
         })
         .then(() => {

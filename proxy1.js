@@ -111,50 +111,38 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
-
-
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
-    const transform = sharp();
 
-    input.pipe(transform);
-
-    transform.metadata()
+    // Pipe the input stream to sharp for processing
+    input.pipe(sharp())
+        .metadata()
         .then(metadata => {
-            // Resize if height exceeds 16383 pixels
-            if (metadata.height > 16383) {
-                transform.resize({ height: 16383, width: null });
-            }
+            // Set resize height to null by default, limit to 16383 if it exceeds that value
+            const resizeHeight = metadata.height > 16383 ? 16383 : null;
 
-            // Apply grayscale and format transformations
-            return transform.grayscale(req.params.grayscale)
-                .toFormat(format, {
-                    quality: req.params.quality,
-                    progressive: true,
-                    optimizeScans: true,
-                  effort: 0
-                });
-        })
-        .then(() => {
-            // Set headers for streaming the image
+            // Set response headers
             res.setHeader('content-type', `image/${format}`);
             res.setHeader('x-original-size', req.params.originSize);
 
-            // Pipe the transformed image directly to the client
-            transform.on('info', info => {
-                res.setHeader('content-length', info.size);
-                res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-            });
-
-            transform.pipe(res).on('error', err => {
-                console.error('Error while streaming:', err);
-                redirect(req, res);
-            });
+            // Pipe the image processing stream directly to the response
+            sharp(input)
+                .resize({ height: resizeHeight }) // Apply height constraint if necessary
+                .grayscale(req.params.grayscale)
+                .toFormat(format, {
+                    quality: req.params.quality,
+                    progressive: true,
+                    optimizeScans: true
+                })
+                .on('info', info => {
+                    // Set additional headers once info is available
+                    res.setHeader('content-length', info.size);
+                    res.setHeader('x-bytes-saved', req.params.originSize - info.size);
+                })
+                .on('error', () => redirect(req, res)) // Redirect on error
+                .pipe(res); // Pipe the output directly to the response
         })
-        .catch(err => {
-            console.error('Error processing image:', err);
-            redirect(req, res);
-        });
+        .catch(() => redirect(req, res)); // Handle metadata errors
 }
 
 

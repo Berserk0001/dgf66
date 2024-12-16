@@ -124,7 +124,7 @@ function compress(req, res, input) {
             quality,
             progressive: true,
             optimizeScans: true,
-          effort:0
+          effort: 0
         });
 
     input
@@ -134,15 +134,14 @@ function compress(req, res, input) {
             if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-            return transformer.toBuffer();
+            return transformer.toBuffer({ resolveWithObject: true });
         })
-        .then(buffer => {
-            const info = transformer.options;
+        .then(({ data, info }) => {
             res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', buffer.length);
+            res.setHeader('content-length', data.length);
             res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - buffer.length);
-            res.status(200).end(buffer);
+            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
+            res.status(200).end(data);
         })
         .catch(err => {
             redirect(req, res);

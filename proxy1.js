@@ -115,43 +115,46 @@ function redirect(req, res) {
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
     const maxHeight = 16383;
-    const quality = parseInt(req.params.quality);
-    const grayscale = !!req.params.grayscale;
 
     const transformer = sharp()
-        .grayscale(grayscale)
-        .toFormat(format, {
-            quality,
-            progressive: true,
-            optimizeScans: true,
-          effort: 0
-        });
+        .grayscale(req.params.grayscale);
 
+    // Pipe the input stream through transformer
     input
         .pipe(transformer)
-        .metadata()
-        .then(metadata => {
+        .metadata((err, metadata) => {
+            if (err) {
+                return redirect(req, res);
+            }
+
             if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-            //return transformer.toBuffer({ resolveWithObject: true });
-        })
-        .toBuffer((err, output, info) => {
-                if (err || res.headersSent) return redirect(req, res);
-                setResponseHeaders(info, format);
-                res.status(200);
-                res.write(output);
-                res.end();
-            });
-        function setResponseHeaders(info, imgFormat) {
+
+            transformer
+                .toFormat(format, {
+                    quality: parseInt(req.params.quality),
+                    progressive: true,
+                    optimizeScans: true,
+                  effort: 0
+                })
+                .toBuffer((err, output, info) => {
+                    if (err || !info || res.headersSent) {
+                        return redirect(req, res);
+                    }
+                    setResponseHeaders(info, format);
+                    res.status(200);
+                    res.write(output);
+                    res.end();
+                });
+        });
+  function setResponseHeaders(info, imgFormat) {
         res.setHeader('content-type', `image/${imgFormat}`);
         res.setHeader('content-length', info.size);
         res.setHeader('x-original-size', req.params.originSize);
         res.setHeader('x-bytes-saved', req.params.originSize - info.size);
-        }
+  }
 }
-
-
 
 
 

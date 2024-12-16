@@ -135,13 +135,13 @@ function compress(req, res, input) {
             }
             return transformer.toBuffer();
         })
-        .then(buffer => {
+        .then(data => {
            // const info = transformer.options;
             res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', buffer.length);
+            res.setHeader('content-length', data.length);
             res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - buffer.length);
-            res.status(200).end(buffer);
+            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
+            res.end(data);
         })
         .catch(err => {
             redirect(req, res);

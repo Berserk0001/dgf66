@@ -111,10 +111,11 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
+
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
     const maxHeight = 16383;
-    const quality = parseInt(req.params.quality);
+    const quality = parseInt(req.params.quality, 10);
     const grayscale = !!req.params.grayscale;
 
     const transformer = sharp()
@@ -123,28 +124,29 @@ function compress(req, res, input) {
             quality,
             progressive: true,
             optimizeScans: true,
-          effort: 0
         });
 
     input
         .pipe(transformer)
-        .metadata((err, metadata) => {
-            if (err) {
-                return redirect(req, res);
-            }
-            if (metadata.height && metadata.height > maxHeight) {
+        .on('info', (info) => {
+            // Adjust dimensions if necessary
+            if (info.height && info.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-
+        })
+        .on('data', (data) => {
             res.setHeader('content-type', `image/${format}`);
-            // We don't know the final content length when streaming, so we omit 'content-length'
-            
-            // Piping directly to the response without buffering
-            transformer.on('error', (e) => {
-                redirect(req, res); // Handle errors by redirecting
-            }).pipe(res);
-        });
+            res.setHeader('content-length', data.length);
+            res.setHeader('x-original-size', req.params.originSize);
+            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
+            res.status(200);
+        })
+        .on('error', (err) => {
+            redirect(req, res);
+        })
+        .pipe(res);
 }
+
 
 
 

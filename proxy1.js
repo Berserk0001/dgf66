@@ -111,43 +111,50 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
-
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
     const maxHeight = 16383;
     const quality = parseInt(req.params.quality, 10);
     const grayscale = !!req.params.grayscale;
 
-    const transformer = sharp()
-        .grayscale(grayscale)
-        .toFormat(format, {
-            quality,
-            progressive: true,
-            optimizeScans: true,
-        });
+    const transformer = sharp();
 
-    input
-        .pipe(transformer)
-        .on('info', (info) => {
-            // Adjust dimensions if necessary
-            if (info.height && info.height > maxHeight) {
+    // Collect metadata before processing
+    transformer
+        .metadata()
+        .then((metadata) => {
+            if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
+
+            transformer
+                .grayscale(grayscale)
+                .toFormat(format, {
+                    quality,
+                    progressive: true,
+                    optimizeScans: true,
+                });
+
+            // Pipe the transformed data directly to the response
+            input
+                .pipe(transformer)
+                .on('error', (err) => {
+                    redirect(req, res);
+                })
+                .pipe(
+                    res
+                        .setHeader('content-type', `image/${format}`)
+                        .on('finish', () => {
+                            res.setHeader('x-original-size', req.params.originSize);
+                            res.setHeader('x-bytes-saved', req.params.originSize - res.getHeader('content-length'));
+                            res.status(200);
+                        })
+                );
         })
-        .on('data', (data) => {
-            res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', data.length);
-            res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
-            res.status(200);
-        })
-        .on('error', (err) => {
+        .catch((err) => {
             redirect(req, res);
-        })
-        .pipe(res);
+        });
 }
-
-
 
 
 /**

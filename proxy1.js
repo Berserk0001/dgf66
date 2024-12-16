@@ -123,7 +123,7 @@ function compress(req, res, input) {
         .then(metadata => {
             // Determine resize height (limit to 16383 if necessary)
             if (metadata.height > 16383) {
-                transform.resize({ height: 16383 });
+               transform = transform.resize({ height: 16383 });
             }
             // Set response headers early
             res.setHeader('content-type', `image/${format}`);

@@ -128,25 +128,22 @@ function compress(req, res, input) {
 
     input
         .pipe(transformer)
-        .metadata()
-        .then(metadata => {
+        .metadata((err, metadata) => {
+            if (err) {
+                return redirect(req, res);
+            }
             if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-            //return transformer.toBuffer();
-        })
-      .pipe(res);
-     /*   .then(data => {
-           // const info = transformer.options;
+
             res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', data.length);
-            res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
-            res.end(data);
-        })
-        .catch(err => {
-            redirect(req, res);
-        });*/
+            // We don't know the final content length when streaming, so we omit 'content-length'
+            
+            // Piping directly to the response without buffering
+            transformer.on('error', (e) => {
+                redirect(req, res); // Handle errors by redirecting
+            }).pipe(res);
+        });
 }
 
 

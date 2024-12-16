@@ -134,18 +134,21 @@ function compress(req, res, input) {
             if (metadata.height && metadata.height > maxHeight) {
                 transformer.resize(null, maxHeight);
             }
-            return transformer.toBuffer({ resolveWithObject: true });
+            //return transformer.toBuffer({ resolveWithObject: true });
         })
-        .then(({ data, info }) => {
-            res.setHeader('content-type', `image/${format}`);
-            res.setHeader('content-length', data.length);
-            res.setHeader('x-original-size', req.params.originSize);
-            res.setHeader('x-bytes-saved', req.params.originSize - data.length);
-            res.status(200).end(data);
-        })
-        .catch(err => {
-            redirect(req, res);
-        });
+        .toBuffer((err, output, info) => {
+                if (err || res.headersSent) return redirect(req, res);
+                setResponseHeaders(info, format);
+                res.status(200);
+                res.write(output);
+                res.end();
+            });
+        function setResponseHeaders(info, imgFormat) {
+        res.setHeader('content-type', `image/${imgFormat}`);
+        res.setHeader('content-length', info.size);
+        res.setHeader('x-original-size', req.params.originSize);
+        res.setHeader('x-bytes-saved', req.params.originSize - info.size);
+        }
 }
 
 

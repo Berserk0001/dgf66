@@ -136,7 +136,7 @@ function compress(req, res, input) {
             return transformer.toBuffer();
         })
         .then(buffer => {
-            const info = transformer.options;
+           // const info = transformer.options;
             res.setHeader('content-type', `image/${format}`);
             res.setHeader('content-length', buffer.length);
             res.setHeader('x-original-size', req.params.originSize);

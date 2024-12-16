@@ -114,8 +114,7 @@ function redirect(req, res) {
 function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
 
-    // Pipe the input stream to sharp for processing
-    input.pipe(sharp())
+    input.pipe(sharp()) // Pipe the input stream to sharp
         .metadata()
         .then(metadata => {
             // Set resize height to null by default, limit to 16383 if it exceeds that value
@@ -126,7 +125,7 @@ function compress(req, res, input) {
             res.setHeader('x-original-size', req.params.originSize);
 
             // Pipe the image processing stream directly to the response
-            sharp(input)
+            input.pipe(sharp())
                 .resize({ height: resizeHeight }) // Apply height constraint if necessary
                 .grayscale(req.params.grayscale)
                 .toFormat(format, {
@@ -144,6 +143,7 @@ function compress(req, res, input) {
         })
         .catch(() => redirect(req, res)); // Handle metadata errors
 }
+
 
 
 /**

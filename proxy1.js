@@ -122,11 +122,8 @@ function compress(req, res, input) {
         .metadata()
         .then(metadata => {
             // Determine resize height (limit to 16383 if necessary)
-            let resizeWidth = null;
-          let resizeHeight = null;
-            // Set resize height to null by default, limit to 16383 if it exceeds that value
             if (metadata.height > 16383) {
-              resizeHeight = 16383;
+                transform.resize({ height: 16383 });
             }
             // Set response headers early
             res.setHeader('content-type', `image/${format}`);
@@ -134,7 +131,6 @@ function compress(req, res, input) {
 
             // Apply transformations and return the stream
             return transform
-                .resize({ width: resizeWidth, height: resizeHeight })
                 .grayscale(!!req.params.grayscale) // Apply grayscale if specified
                 .toFormat(format, {
                     quality: req.params.quality, // Default quality

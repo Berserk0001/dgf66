@@ -112,7 +112,7 @@ function redirect(req, res) {
 }*/
 
     function compress(req, res, input) {
-    const format = req.params.webp ? 'webp' : 'jpeg';
+    const format = 'avif';
       const transform = sharp();
 
     input.pipe(transform);
@@ -136,8 +136,7 @@ function redirect(req, res) {
                 .toFormat(format, {
                     quality: req.params.quality,
                     lossless: false,
-                  nearLossless: true,
-                  effort: 0
+                     effort: 0
                 })
                 .on('info', info => {
                     // Set response headers

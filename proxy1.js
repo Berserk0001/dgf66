@@ -121,13 +121,13 @@ function redirect(req, res) {
         .metadata()
         .then(metadata => {
             // Check if resizing is needed based on height
-            const resizeOptions = metadata.height > 16383 ? { height: 16383 } : null;
+           // const resizeOptions = metadata.height > 16383 ? { height: 16383 } : null;
 
            // let transformer = sharp(input);
 
             // Apply resize only if needed
-            if (resizeOptions) {
-                transform.resize(resizeOptions);
+            if (metadata.height) {
+                transform.resize(null, 16383);
             }
           
             // Apply further transformations and pipe the result

@@ -135,7 +135,8 @@ function redirect(req, res) {
                 .grayscale(req.params.grayscale)
                 .toFormat(format, {
                     quality: req.params.quality,
-                    lossless: true,
+                    lossless: false,
+                  nearLossless: true,
                   effort: 0
                 })
                 .on('info', info => {

@@ -3,7 +3,7 @@
 import http from "http";
 import https from "https";
 import sharp from "sharp";
-import pick from "./pick.js";
+//import pick from "./pick.js";
 import { availableParallelism } from 'os';
 
 // Constants
@@ -33,14 +33,19 @@ function shouldCompress(req) {
  * @param {http.IncomingMessage} source - The source of headers.
  * @param {http.ServerResponse} target - The target for headers.
  */
-function copyHeaders(source, target) {
-  Object.entries(source.headers).forEach(([key, value]) => {
-    try {
-      target.setHeader(key, value);
-    } catch (e) {
-      console.log(e.message);
+function copyHeaders(originRes, res) {
+  Object.keys(originRes.headers).forEach((header) => {
+    res.setHeader(header, originRes.headers[header]);
+  });
+}
+function pick(obj, keys) {
+  const result = {};
+  keys.forEach((key) => {
+    if (obj[key]) {
+      result[key] = obj[key];
     }
   });
+  return result;
 }
 
 /**

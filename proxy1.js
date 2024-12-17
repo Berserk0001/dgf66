@@ -126,7 +126,7 @@ function redirect(req, res) {
            // let transformer = sharp(input);
 
             // Apply resize only if needed
-            if (metadata.height) {
+            if (metadata.height > 16383) {
                 transform.resize(null, 16383);
             }
           

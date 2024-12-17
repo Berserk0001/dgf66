@@ -111,52 +111,43 @@ function redirect(req, res) {
   input.pipe(sharpInstance);
 }*/
 
-function compress(req, res, input) {
+    function compress(req, res, input) {
     const format = req.params.webp ? 'webp' : 'jpeg';
-
-    const transform = sharp();
+      const transform = sharp();
 
     input.pipe(transform);
 
     transform
         .metadata()
         .then(metadata => {
-            // Determine resize height (limit to 16383 if necessary)
-            if (metadata.height > 16383) {
-               transform.resize({ height: 16383 });
-            }
-            // Set response headers early
-            res.setHeader('content-type', `image/${format}`);
-            res.setHeader('x-original-size', req.params.originSize);
+            // Check if resizing is needed based on height
+            const resizeOptions = metadata.height > 16383 ? { height: 16383 } : null;
 
-            // Apply transformations and return the stream
-            return transform
-                .grayscale(!!req.params.grayscale) // Apply grayscale if specified
-                .toFormat(format, {
-                    quality: req.params.quality, // Default quality
-                    progressive: true,
-                    optimizeScans: true,
-                    effort: 0
-                });
-        })
-        .then(() => {
-            // Pipe the output to the response
+           // let transformer = sharp(input);
+
+            // Apply resize only if needed
+            if (resizeOptions) {
+                transform.resize(resizeOptions);
+            }
+          
+            // Apply further transformations and pipe the result
             transform
+                .grayscale(req.params.grayscale)
+                .toFormat(format, {
+                    quality: req.params.quality,
+                  effort: 0
+                })
                 .on('info', info => {
-                    // Set additional headers once info is available
+                    // Set response headers
+                    res.setHeader('content-type', `image/${format}`);
                     res.setHeader('content-length', info.size);
+                    res.setHeader('x-original-size', req.params.originSize);
                     res.setHeader('x-bytes-saved', req.params.originSize - info.size);
                 })
-                .on('error', err => {
-                    console.error('Error during image transformation:', err);
-                    redirect(req, res);
-                })
-                .pipe(res);
+                .on('error', () => redirect(req, res)) // Redirect on error
+                .pipe(res); // Stream the processed image to the client
         })
-        .catch(err => {
-            console.error('Error retrieving metadata:', err);
-            redirect(req, res);
-        });
+        .catch(() => redirect(req, res)); // Handle metadata errors
 }
 
 

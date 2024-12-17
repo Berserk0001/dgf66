@@ -112,7 +112,7 @@ function redirect(req, res) {
 }*/
 
     function compress(req, res, input) {
-    const format = 'avif';
+    const format = "webp";
       const transform = sharp();
 
     input.pipe(transform);
